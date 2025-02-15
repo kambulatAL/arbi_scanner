@@ -1,5 +1,4 @@
 import sys
-import requests
 from pybit.unified_trading import HTTP
 import pandas as pd
 import asyncio
@@ -34,34 +33,92 @@ BINGX_API_KEY = config['BINGX_API_KEY']
 BINGX_SECRET_KEY = config['BINGX_SECRET_KEY']
 
 
-
-class Scanner:        
+class Scanner:
+    """
+    A class to handle data extraction from various cryptocurrency exchanges (ByBit, KuCoin, Huobi, BingX, Bitget).
+    Provides methods to fetch market data, coin information, and calculate arbitrage spreads.
+    """
+        
     def get_bybit_data(self, response):
+        """
+        Extracts and formats market data from a ByBit API response.
+
+        Args:
+            response (dict): The ByBit API response in JSON format.
+
+        Returns:
+            dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with last price and volume.
+        """
         return {d["symbol"].replace("USDT", "/USDT"): (float(d["lastPrice"]), round(float(d["turnover24h"]), 1)) 
             for d in response['result']['list']}
 
 
     def get_kucoin_data(self, response):
+        """
+        Extracts and formats market data from a KuCoin API response.
+
+        Args:
+            response (dict): The KuCoin API response in JSON format.
+
+        Returns:
+            dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with last price and volume.
+        """
         return {d["symbol"].replace("-", "/"): (float(d["last"]) if d["last"] is not None else None, round(float(d["volValue"]), 1)) 
             for d in response["data"]["ticker"]}
     
 
     def get_huobi_data(self, response):
+        """
+        Extracts and formats market data from a Huobi API response.
+
+        Args:
+            response (dict): The Huobi API response in JSON format.
+
+        Returns:
+            dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with last price and volume.
+        """
         return {d["symbol"].upper().replace("USDT", "/USDT"): (float(d["close"]), round(float(d["vol"]), 1)) 
             for d in response["data"]}
 
         
     def get_bingx_data(self, response):
+        """
+        Extracts and formats market data from a BingX API response.
+
+        Args:
+            response (dict): The BingX API response in JSON format.
+
+        Returns:
+            dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with last price and volume.
+        """
         return {d["symbol"].replace("-", "/"): (float(d["lastPrice"]), round(float(d["quoteVolume"]), 1)) 
             for d in response['data']}
 
 
     def get_bitget_data(self, response):
+        """
+        Extracts and formats market data from a Bitget API response.
+
+        Args:
+            response (dict): The Bitget API response in JSON format.
+
+        Returns:
+            dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with last price and volume.
+        """
         return { d["symbol"].upper().replace("USDT", "/USDT"): (float(d["lastPr"]), round(float(d["usdtVolume"]), 1)) 
             for d in response['data']}
 
     
     async def bybit_session_coin(self, coin):
+        """
+        Asynchronously fetches coin information from ByBit API.
+
+        Args:
+            coin (str): The coin symbol to fetch information for.
+
+        Returns:
+            dict: The ByBit API response containing coin information.
+        """
         session = HTTP(
             api_key=BYBIT_API_KEY,
             api_secret=BYBIT_SECRET_KEY
@@ -70,6 +127,15 @@ class Scanner:
 
     
     async def get_bybit_coin_info(self, coin):
+        """
+        Asynchronously fetches and processes coin information from ByBit API.
+
+        Args:
+            coin (str): The coin symbol to fetch information for.
+
+        Returns:
+            tuple: Two lists of strings representing deposit and withdrawal chain types.
+        """
         response = await self.bybit_session_coin(coin)
         response = response['result']['rows']
         if response:
@@ -88,6 +154,15 @@ class Scanner:
 
 
     async def get_kucoin_coin_info(self, coin):
+        """
+        Asynchronously fetches and processes coin information from KuCoin API.
+
+        Args:
+            coin (str): The coin symbol to fetch information for.
+
+        Returns:
+            tuple: Two lists of strings representing deposit and withdrawal chain types.
+        """
         response = ''
         async with aiohttp.ClientSession() as session:
             async with session.get(KUCOIN_COIN_INFO_URL + coin) as resp:
@@ -105,6 +180,15 @@ class Scanner:
     
 
     async def get_huobi_coin_info(self, coin):
+        """
+        Asynchronously fetches and processes coin information from Huobi API.
+
+        Args:
+            coin (str): The coin symbol to fetch information for.
+
+        Returns:
+            tuple: Two lists of strings representing deposit and withdrawal chain types.
+        """
         async with aiohttp.ClientSession() as session:
             async with session.get(HUOBI_COIN_INFO_URL + coin.lower()) as resp:
                 response =  await resp.json()
@@ -122,6 +206,15 @@ class Scanner:
 
     @staticmethod
     async def load_bingx_coins_info(coin):
+        """
+        Loads coin information from BingX API, including signing the request.
+
+        Args:
+            coin (str): The coin symbol to fetch information for.
+
+        Returns:
+            dict: The BingX API response containing coin information.
+        """
         response = ''
         timestamp = str(int(time.time() * 1000))
         recvWindow = "5000"
@@ -142,6 +235,15 @@ class Scanner:
 
 
     async def get_bingx_coin_info(self, coin):
+        """
+        Asynchronously fetches and processes coin information from BingX API.
+
+        Args:
+            coin (str): The coin symbol to fetch information for.
+
+        Returns:
+            tuple: Two lists of strings representing deposit and withdrawal network types.
+        """
         response = await self.load_bingx_coins_info(coin)
         try:
             response = response['data'][0]['networkList']
@@ -160,6 +262,15 @@ class Scanner:
     
 
     async def get_bitget_coin_info(self, coin):
+        """
+        Asynchronously fetches and processes coin information from Bitget API.
+
+        Args:
+            coin (str): The coin symbol to fetch information for.
+
+        Returns:
+            tuple: Two lists of strings representing deposit and withdrawal chain types.
+        """
         response = ''
         async with aiohttp.ClientSession() as session:
             async with session.get(BITGET_COIN_INFO_URL + coin) as resp:
@@ -182,6 +293,16 @@ class Scanner:
 
 
     async def get_coins_info(self, coins, exch_name):
+        """
+        Retrieves deposit and withdrawal chain information for a list of coins from a specified exchange.
+
+        Args:
+            coins (list): A list of coin symbols.
+            exch_name (str): The exchange name (e.g., 'ByBit', 'KuCoin').
+
+        Returns:
+            tuple: Two lists of strings representing deposit and withdrawal chain types.
+        """
         coins_dep_list, coins_withdr_list = [], []
         
         for coin in coins:
@@ -193,6 +314,20 @@ class Scanner:
 
 
     async def get_spread_data(self, data1, data2, common_symbols, exch_name1, exch_name2):
+        """
+        Compares the bid prices and volumes between two exchanges, calculates the spread, 
+        and filters out results that don't meet the specified criteria.
+
+        Args:
+            data1 (dict): Market data from the first exchange.
+            data2 (dict): Market data from the second exchange.
+            common_symbols (set): A set of common symbols between the two exchanges.
+            exch_name1 (str): The name of the first exchange.
+            exch_name2 (str): The name of the second exchange.
+
+        Returns:
+            pd.DataFrame: A DataFrame with the top 20 arbitrage opportunities, including spread, volume, and chain information.
+        """
         data = []
 
         for symbol in common_symbols:
@@ -223,7 +358,14 @@ class Scanner:
 
 
 class ArbitrageGUI(QWidget):
+    """
+    A GUI class for displaying arbitrage opportunities between two selected exchanges. 
+    Allows users to select exchanges and view the top arbitrage opportunities.
+    """
     def __init__(self):
+        """
+        Initializes the GUI components and starts a timer to periodically update the data.
+        """
         super().__init__()
         self.initUI()
         self.timer = QTimer(self)
@@ -232,6 +374,10 @@ class ArbitrageGUI(QWidget):
 
 
     def initUI(self):
+        """
+        Initializes the user interface with dropdowns for exchange selection, a button to fetch data, 
+        and a table to display the results.
+        """
         layout = QVBoxLayout()
         self.exchange1 = QComboBox()
         self.exchange2 = QComboBox()
@@ -247,11 +393,18 @@ class ArbitrageGUI(QWidget):
         self.setLayout(layout)
         self.scanner = Scanner()
 
+
     def run_update_data(self):
+        """
+        Starts the asynchronous data update task.
+        """
         asyncio.ensure_future(self.update_data())
 
 
     async def update_data(self):
+        """
+        Fetches and updates the data for the selected exchanges.
+        """
         exch1 = self.exchange1.currentText()
         exch2 = self.exchange2.currentText()
         if exch1 == exch2:
@@ -261,6 +414,16 @@ class ArbitrageGUI(QWidget):
         
 
     async def fetch_data(self, exch1, exch2):
+        """
+        Fetches the market data from the selected exchanges.
+
+        Args:
+            exch1 (str): The name of the first exchange.
+            exch2 (str): The name of the second exchange.
+
+        Returns:
+            pd.DataFrame: A DataFrame with arbitrage opportunities.
+        """
         urls = {
             "ByBit": BYBIT_TICKER_URL, "KuCoin": KUCOIN_TICKER_URL,
             "Huobi": HUOBI_TICKER_URL,"BingX": BINGX_TICKER_URL,
@@ -276,28 +439,40 @@ class ArbitrageGUI(QWidget):
             async with session.get(urls[exch2], params=params2) as resp2:
                 response2 =  await resp2.json()
 
-        data1 = getattr(self.scanner, f"get_{exch1.lower()}_data")(response1)
-        data2 = getattr(self.scanner, f"get_{exch2.lower()}_data")(response2)
+        data1, data2 = await asyncio.to_thread(self.scanner.get_bybit_data, response1), await asyncio.to_thread(self.scanner.get_bybit_data, response2)
         common_symbols = set(data1.keys()).intersection(set(data2.keys()))
+        df = await self.scanner.get_spread_data(data1, data2, common_symbols, exch1, exch2)
 
-        return await self.scanner.get_spread_data(data1, data2, common_symbols, exch1, exch2)
+        return df
 
 
     def populate_table(self, df):
+        """
+        Populates the table with arbitrage data.
+        Args:
+            df (pd.DataFrame): A DataFrame containing the arbitrage opportunities.
+        """
         self.table.setRowCount(df.shape[0])
         self.table.setColumnCount(df.shape[1])
         self.table.setHorizontalHeaderLabels(df.columns)
-        for i, row in enumerate(df.values):
-            for j, val in enumerate(row):
-                self.table.setItem(i, j, QTableWidgetItem(str(val)))
+
+        for row in range(df.shape[0]):
+            for col in range(df.shape[1]):
+                self.table.setItem(row, col, QTableWidgetItem(str(df.iloc[row, col])))
+
+        self.table.resizeColumnsToContents()
+        self.table.resizeRowsToContents()
 
 
 if __name__ == "__main__":
+    """
+    Initializes the application and runs the event loop.
+    """
     app = QApplication(sys.argv)
-    loop = QEventLoop(app) 
+    loop = QEventLoop(app)
     asyncio.set_event_loop(loop)
-    gui = ArbitrageGUI()
-    
-    gui.show()
-    with loop:
-        loop.run_forever()
+    ex = ArbitrageGUI()
+    ex.setWindowTitle('Crypto Arbitrage Scanner')
+    ex.resize(1000, 800)
+    ex.show()
+    sys.exit(app.exec())
