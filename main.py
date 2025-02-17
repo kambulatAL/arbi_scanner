@@ -14,16 +14,27 @@ import hmac
 from hashlib import sha256
 
 
-HUOBI_TICKER_URL    = "https://api.huobi.pro/market/tickers"
 BYBIT_TICKER_URL    = "https://api.bybit.com/v5/market/tickers?category=spot"
+HUOBI_TICKER_URL    = "https://api.huobi.pro/market/tickers"
 KUCOIN_TICKER_URL   = "https://api.kucoin.com/api/v1/market/allTickers"
 BINGX_TICKER_URL    = "https://open-api.bingx.com/openApi/spot/v1/ticker/24hr?"
 BITGET_TICKER_URL   = "https://api.bitget.com/api/v2/spot/market/tickers"
+MEXC_TICKER_URL     = "https://api.mexc.com/api/v3/ticker/24hr"
+
+
+BYBIT_ORDERBOOK_URL     = "https://api.bybit.com/v5/market/orderbook?category=spot&limit=5&symbol="
+HOUBI_ORDERBOOK_URL     = "https://api.huobi.pro/market/depth?depth=5&type=step1&symbol="
+KUCOIN_ORDERBOOK_URL    = "https://api.kucoin.com/api/v1/market/orderbook/level2_20?symbol="
+BINGX_ORDERBOOK_URL     = "https://open-api.bingx.com/openApi/spot/v1/market/depth?limit=5&symbol="
+BITGET_ORDERBOOK_URL    = "https://api.bitget.com/api/v2/spot/market/orderbook?type=step1&limit=5&symbol="
+MEXC_ORDERBOOK_URL      = "https://api.mexc.com/api/v3/depth?limit=5&symbol="
 
 KUCOIN_COIN_INFO_URL    = "https://api.kucoin.com/api/v2/currencies/"
 HUOBI_COIN_INFO_URL     = "https://api.huobi.pro/v2/reference/currencies?currency="
 BINGX_COIN_INFO_URL     = "https://open-api.bingx.com/openApi/wallets/v1/capital/config/getall"
 BITGET_COIN_INFO_URL    = "https://api.bitget.com/api/v2/spot/public/coins?coin="
+MEXC_COIN_INFO_URL      = "https://api.mexc.com/api/v3/capital/config/getall"
+
 
 config = dotenv_values()
 
@@ -31,6 +42,8 @@ BYBIT_API_KEY = config['BYBIT_API_KEY']
 BYBIT_SECRET_KEY = config['BYBIT_SECRET_KEY']
 BINGX_API_KEY = config['BINGX_API_KEY']
 BINGX_SECRET_KEY = config['BINGX_SECRET_KEY']
+MEXC_API_KEY = config['MEXC_API_KEY']
+MEXC_SECRET_KEY = config['MEXC_SECRET_KEY']
 
 
 class Scanner:
@@ -49,7 +62,7 @@ class Scanner:
         Returns:
             dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with last price and volume.
         """
-        return {d["symbol"].replace("USDT", "/USDT"): (float(d["lastPrice"]), round(float(d["turnover24h"]), 1)) 
+        return {d["symbol"].replace("USDT", "/USDT"): (float(d["bid1Price"]), float(d['ask1Price']), round(float(d["turnover24h"]), 1)) 
             for d in response['result']['list']}
 
 
@@ -61,9 +74,10 @@ class Scanner:
             response (dict): The KuCoin API response in JSON format.
 
         Returns:
-            dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with last price and volume.
+            dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with bid/ask and volume.
         """
-        return {d["symbol"].replace("-", "/"): (float(d["last"]) if d["last"] is not None else None, round(float(d["volValue"]), 1)) 
+
+        return {d["symbol"].replace("-", "/"): (float(d["buy"]), float(d['sell']), round(float(d["volValue"]), 1)) 
             for d in response["data"]["ticker"]}
     
 
@@ -75,9 +89,9 @@ class Scanner:
             response (dict): The Huobi API response in JSON format.
 
         Returns:
-            dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with last price and volume.
+            dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with bid/ask and volume.
         """
-        return {d["symbol"].upper().replace("USDT", "/USDT"): (float(d["close"]), round(float(d["vol"]), 1)) 
+        return {d["symbol"].upper().replace("USDT", "/USDT"): (float(d["bid"]), float(d['ask']), round(float(d["vol"]), 1)) 
             for d in response["data"]}
 
         
@@ -91,8 +105,11 @@ class Scanner:
         Returns:
             dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with last price and volume.
         """
-        return {d["symbol"].replace("-", "/"): (float(d["lastPrice"]), round(float(d["quoteVolume"]), 1)) 
-            for d in response['data']}
+
+        return {d["symbol"].replace("-", "/"): (float(d["bidPrice"]) if 'bidPrice' in d.keys() else None, 
+                                                float(d['askPrice']) if 'askPrice' in d.keys() else None, 
+                                                round(float(d["quoteVolume"]), 1)) 
+                for d in response['data']}
 
 
     def get_bitget_data(self, response):
@@ -105,10 +122,15 @@ class Scanner:
         Returns:
             dict: A dictionary where the keys are symbols (e.g., "BTC/USDT") and values are tuples with last price and volume.
         """
-        return { d["symbol"].upper().replace("USDT", "/USDT"): (float(d["lastPr"]), round(float(d["usdtVolume"]), 1)) 
+        return { d["symbol"].upper().replace("USDT", "/USDT"): (float(d['bidPr']), float(d['askPr']), round(float(d['usdtVolume']), 1)) 
             for d in response['data']}
 
-    
+
+    def get_mexc_data(self, response):
+        return { d["symbol"].replace("USDT", "/USDT"): (float(d['bidPrice']), float(d['askPrice']), round(float(d['quoteVolume']), 1)) 
+            for d in response}
+
+
     async def bybit_session_coin(self, coin):
         """
         Asynchronously fetches coin information from ByBit API.
@@ -292,6 +314,46 @@ class Scanner:
         return chain_deposit_list, chain_withdraw_list
 
 
+    @staticmethod
+    async def load_mexc_coins_info():        
+        response = ''
+        timestamp = str(int(time.time() * 1000))
+
+        params = "timestamp=%s"%(timestamp)
+        signature = hmac.new(MEXC_SECRET_KEY.encode(), params.encode(), digestmod=sha256).hexdigest()
+        url = f"{MEXC_COIN_INFO_URL}?{params}&signature={signature}"
+        
+        headers = {
+            'X-MEXC-APIKEY': MEXC_API_KEY,
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as resp:
+                response = await resp.json()
+
+        return response
+
+
+    async def get_mexc_coin_info(self, coin):
+    
+        response = await self.load_mexc_coins_info()
+        response = [d for d in response if d['coin'] == coin]
+
+        try:
+            response = response[0]['networkList']
+        except:
+            return [], []
+
+        chain_deposit_list, chain_withdraw_list = [], []
+        for chain in response:
+            if chain['depositEnable'] == True:
+                chain_deposit_list.append(chain['network'])
+            if chain['withdrawEnable'] == True:
+                chain_withdraw_list.append(chain['network'])
+        # await asyncio.sleep(1)
+        return chain_deposit_list, chain_withdraw_list 
+
+
     async def get_coins_info(self, coins, exch_name):
         """
         Retrieves deposit and withdrawal chain information for a list of coins from a specified exchange.
@@ -313,6 +375,108 @@ class Scanner:
         return coins_dep_list, coins_withdr_list
 
 
+    @staticmethod
+    def get_avg_price_top_5(order_book):
+        """
+       Calculates the average price taking into account the volumes at the first 5 levels of the stack.
+        
+        :param order_book: List of stack levels [[price, volume], [price, volume], ...].
+        :return: Average price including volumes.
+        """
+        total_volume = 0
+        total_cost = 0
+        
+        for price, volume in order_book:  
+            total_cost += float(price) * float(volume) 
+            total_volume += float(volume) 
+        
+        if total_volume == 0:
+            return None, None 
+        
+        return round(total_cost / total_volume, 5), round(total_volume, 2)
+
+
+    async def get_bybit_orderbook(self, coin, buy):
+        pair = coin + "USDT"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(BYBIT_ORDERBOOK_URL + pair) as resp:
+                response =  await resp.json()
+        
+        response = response['result']
+        return self.get_avg_price_top_5(response['a']) if buy else self.get_avg_price_top_5(response['b'])
+    
+
+    async def get_huobi_orderbook(self, coin, buy):
+        pair = coin.lower() + "usdt"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(HOUBI_ORDERBOOK_URL + pair) as resp:
+                response =  await resp.json()
+        
+        response = response['tick']
+        return self.get_avg_price_top_5(response['asks']) if buy else self.get_avg_price_top_5(response['bids'])
+    
+
+    async def get_kucoin_orderbook(self, coin, buy):
+        pair = coin + '-USDT'
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(KUCOIN_ORDERBOOK_URL + pair) as resp:
+                response =  await resp.json()
+        
+        response = response['data']
+        return self.get_avg_price_top_5(response['asks']) if buy else self.get_avg_price_top_5(response['bids'])
+
+
+    async def get_bingx_orderbook(self, coin, buy):
+        pair = coin + '-USDT'
+        params = {'timestamp': str(int(time.time() * 1000))}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(BINGX_ORDERBOOK_URL + pair, params=params) as resp:
+                response =  await resp.json()
+        
+        response = response['data']
+        return self.get_avg_price_top_5(response['asks']) if buy else self.get_avg_price_top_5(response['bids'])
+
+
+    async def get_bitget_orderbook(self, coin, buy):
+        pair = coin + 'USDT'
+        async with aiohttp.ClientSession() as session:
+            async with session.get(BITGET_ORDERBOOK_URL + pair) as resp:
+                response =  await resp.json()
+        
+        response = response['data']
+        return self.get_avg_price_top_5(response['asks']) if buy else self.get_avg_price_top_5(response['bids'])
+
+
+    async def get_mexc_orderbook(self, coin, buy):
+        pair = coin + 'USDT'
+        async with aiohttp.ClientSession() as session:
+            async with session.get(MEXC_ORDERBOOK_URL + pair) as resp:
+                response =  await resp.json()
+        
+        # response = response['data']
+        return self.get_avg_price_top_5(response['asks']) if buy else self.get_avg_price_top_5(response['bids'])
+
+
+    async def calc_orderbook_price(self, exch, coin, buy=False):
+        return await getattr(self, f"get_{exch.lower()}_orderbook")(coin.split('/')[0], buy)
+        
+
+    @staticmethod
+    def calculate_spread(exch1, exch2, bid1, ask1, bid2, ask2):
+        spread_buy = (bid2 - ask1) / (ask1+0.0001) * 100  # buy on exch 1, sell on exch 2
+        spread_sell = (bid1 - ask2) / (ask2+0.0001) * 100  # buy on exch 2, sell on exch 1
+
+        if spread_buy > spread_sell:
+            best_spread = spread_buy
+            buy_exchange, sell_exchange = exch1, exch2
+        else:
+            best_spread = spread_sell
+            buy_exchange, sell_exchange = exch2, exch1
+
+        return round(best_spread, 2), buy_exchange, sell_exchange
+
+
     async def get_spread_data(self, data1, data2, common_symbols, exch_name1, exch_name2):
         """
         Compares the bid prices and volumes between two exchanges, calculates the spread, 
@@ -331,16 +495,26 @@ class Scanner:
         data = []
 
         for symbol in common_symbols:
-            bid_exch1, vol_exch1 = data1.get(symbol, (None, None))
-            bid_exch2, vol_exch2 = data2.get(symbol, (None, None))
+            bid_exch1, ask_exch1, vol_exch1 = data1.get(symbol, (None, None, None))
+            bid_exch2, ask_exch2, vol_exch2 = data2.get(symbol, (None, None, None))
 
-            if bid_exch1 and bid_exch2:
-                spread = round((abs(bid_exch1 - bid_exch2) / min(bid_exch1, bid_exch2)) * 100, 2)
-                if (spread >= 1 and spread <= 35) and (vol_exch1 > 30000 and vol_exch2 > 30000):
-                    data.append([symbol, bid_exch1, bid_exch2, spread, vol_exch1, vol_exch2])
+            if None not in (bid_exch1, ask_exch1, bid_exch2, ask_exch2):
+                spread, buy_exch, sell_exch = self.calculate_spread(exch_name1, exch_name2, bid_exch1, ask_exch1, bid_exch2, ask_exch2)
+                if (spread >= 0.6 and spread <= 35) and (vol_exch1 > 200000 and vol_exch2 > 200000):
 
-        df = pd.DataFrame(data, columns=["Coin", f"Bid {exch_name1}", f"Bid {exch_name2}", "Spread (%)",
-            f"Vol {exch_name1}", f"Vol {exch_name2}"])
+                    mean_buy_orderbook_price, buy_amount = await self.calc_orderbook_price(buy_exch, symbol, buy=True)
+                    mean_sell_orderbook_price, sell_amount = await self.calc_orderbook_price(sell_exch, symbol, buy=False)
+
+                    data.append([symbol, bid_exch1, ask_exch1, bid_exch2, ask_exch2, spread, 
+                                 f'{buy_exch} >> {sell_exch}', mean_buy_orderbook_price, mean_sell_orderbook_price,
+                                 buy_amount, sell_amount])
+
+        df = pd.DataFrame(data, columns=[
+            "Coin", f"Bid {exch_name1}", f"Ask {exch_name1}", 
+            f"Bid {exch_name2}", f"Ask {exch_name2}",
+            "Spread (%)", "Buy >> Sell", f"Mean order buy price", f"Mean order sell price",
+            f'Buy amount', f'Sell amount'])
+        
         df.sort_values(by=['Spread (%)'], ascending=False, inplace=True)
         
         df = df.head(20)
@@ -354,7 +528,8 @@ class Scanner:
         df[f'{exch_name2}_deposit_chains'] = exch2_dep_list
         df[f'{exch_name2}_withdraw_chains'] = exch2_withd_list
 
-        return df
+        df.replace("", pd.NA, inplace=True)
+        return df.dropna()
 
 
 class ArbitrageGUI(QWidget):
@@ -370,7 +545,7 @@ class ArbitrageGUI(QWidget):
         self.initUI()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.run_update_data)
-        self.timer.start(15000)
+        self.timer.start(10000)
 
 
     def initUI(self):
@@ -381,8 +556,8 @@ class ArbitrageGUI(QWidget):
         layout = QVBoxLayout()
         self.exchange1 = QComboBox()
         self.exchange2 = QComboBox()
-        self.exchange1.addItems(["ByBit", "KuCoin", "Huobi", "BingX", "Bitget"])
-        self.exchange2.addItems(["ByBit", "KuCoin", "Huobi", "BingX", "Bitget"])
+        self.exchange1.addItems(["ByBit", "KuCoin", "Huobi", "BingX", "Bitget", "MEXC"])
+        self.exchange2.addItems(["ByBit", "KuCoin", "Huobi", "BingX", "Bitget", "MEXC"])
         self.button = QPushButton("Get data")
         self.button.clicked.connect(self.run_update_data)
         self.table = QTableWidget()
@@ -427,8 +602,9 @@ class ArbitrageGUI(QWidget):
         urls = {
             "ByBit": BYBIT_TICKER_URL, "KuCoin": KUCOIN_TICKER_URL,
             "Huobi": HUOBI_TICKER_URL,"BingX": BINGX_TICKER_URL,
-            "Bitget": BITGET_TICKER_URL
+            "Bitget": BITGET_TICKER_URL, "MEXC": MEXC_TICKER_URL
         }
+        
         params1 = {} if 'BingX' != exch1 else {'timestamp': str(int(time.time() * 1000))}
         params2 = {} if 'BingX' != exch2 else {'timestamp': str(int(time.time() * 1000))}
         response1, response2 = '', ''
@@ -439,11 +615,11 @@ class ArbitrageGUI(QWidget):
             async with session.get(urls[exch2], params=params2) as resp2:
                 response2 =  await resp2.json()
 
-        data1, data2 = await asyncio.to_thread(self.scanner.get_bybit_data, response1), await asyncio.to_thread(self.scanner.get_bybit_data, response2)
+        data1 = getattr(self.scanner, f"get_{exch1.lower()}_data")(response1)
+        data2 = getattr(self.scanner, f"get_{exch2.lower()}_data")(response2)
         common_symbols = set(data1.keys()).intersection(set(data2.keys()))
-        df = await self.scanner.get_spread_data(data1, data2, common_symbols, exch1, exch2)
-
-        return df
+        
+        return await self.scanner.get_spread_data(data1, data2, common_symbols, exch1, exch2)
 
 
     def populate_table(self, df):
@@ -469,10 +645,10 @@ if __name__ == "__main__":
     Initializes the application and runs the event loop.
     """
     app = QApplication(sys.argv)
-    loop = QEventLoop(app)
+    loop = QEventLoop(app) 
     asyncio.set_event_loop(loop)
-    ex = ArbitrageGUI()
-    ex.setWindowTitle('Crypto Arbitrage Scanner')
-    ex.resize(1000, 800)
-    ex.show()
-    sys.exit(app.exec())
+    gui = ArbitrageGUI()
+    
+    gui.show()
+    with loop:
+        loop.run_forever()
